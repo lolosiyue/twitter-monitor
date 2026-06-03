@@ -6,10 +6,6 @@ Data is crawled from Twitter web’s GraphQL API.
 
 (Due to the unstable return results of Twitter Web's `following` API, accounts with more than 100 followings are not recommended to use `following` monitor.)
 
-## Deployed channel sample
-
-https://t.me/twitter_monitor_menu
-
 ## Usage
 
 ### Setup
