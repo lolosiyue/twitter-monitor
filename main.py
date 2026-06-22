@@ -31,7 +31,7 @@ CONFIG_FIELD_TO_MONITOR = {
 
 
 def _setup_logger(name: str, log_file_path: str, level=logging.INFO):
-    file_handler = logging.FileHandler(log_file_path)
+    file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -39,6 +39,8 @@ def _setup_logger(name: str, log_file_path: str, level=logging.INFO):
 
 
 def _send_summary(telegram_chat_id: str, monitors: dict, watcher: TwitterWatcher):
+    if not TelegramNotifier.initialized:        # ← 加這行
+        return
     for modoule, data in monitors.items():
         monitor_status = {}
         for username, monitor in data.items():
@@ -53,6 +55,8 @@ def _send_summary(telegram_chat_id: str, monitors: dict, watcher: TwitterWatcher
 
 
 def _check_monitors_status(telegram_token: str, telegram_chat_id: int, monitors: dict):
+    if not TelegramNotifier.initialized:        # ← 加這行
+        return
     alerts = StatusTracker.check()
     for title, monitor in monitors[ProfileMonitor.monitor_type].items():
         if monitor.username.element != monitor.original_username:
@@ -62,6 +66,8 @@ def _check_monitors_status(telegram_token: str, telegram_chat_id: int, monitors:
 
 
 def _check_tokens_status(telegram_token: str, telegram_chat_id: int, watcher: TwitterWatcher):
+    if not TelegramNotifier.initialized:        # ← 加這行
+        return
     tokens_status = watcher.check_tokens()
     failed_tokens = [token for token, status in tokens_status.items() if status == False]
     if failed_tokens:
@@ -92,7 +98,8 @@ def run(log_dir, cookies_dir, token_config_path, monitoring_config_path, interva
     os.makedirs(log_dir, exist_ok=True)
     logging.basicConfig(filename=os.path.join(log_dir, 'main'),
                         format='%(asctime)s - %(levelname)s - %(message)s',
-                        level=logging.WARNING)
+                        level=logging.WARNING,
+                        encoding='utf-8')
     _setup_logger('api', os.path.join(log_dir, 'twitter-api'))
     _setup_logger('status', os.path.join(log_dir, 'status-tracker'))
 
@@ -105,11 +112,16 @@ def run(log_dir, cookies_dir, token_config_path, monitoring_config_path, interva
         monitoring_config = json.load(monitoring_config_file)
         assert monitoring_config['monitoring_user_list']
 
-    _setup_logger('telegram', os.path.join(log_dir, 'telegram'))
-    _setup_logger('cqhttp', os.path.join(log_dir, 'cqhttp'))
+    if telegram_bot_token:
+        _setup_logger('telegram', os.path.join(log_dir, 'telegram'))
+        TelegramNotifier.init(token=telegram_bot_token, logger_name='telegram')
+
+    cqhttp_access_token = token_config.get('cqhttp_access_token', '')
+    if cqhttp_access_token:
+        _setup_logger('cqhttp', os.path.join(log_dir, 'cqhttp'))
+        CqhttpNotifier.init(token=cqhttp_access_token, logger_name='cqhttp')
+
     _setup_logger('discord', os.path.join(log_dir, 'discord'))
-    TelegramNotifier.init(token=telegram_bot_token, logger_name='telegram')
-    CqhttpNotifier.init(token=token_config.get('cqhttp_access_token', ''), logger_name='cqhttp')
     DiscordNotifier.init(logger_name='discord')
 
     monitors = dict()
@@ -127,7 +139,8 @@ def run(log_dir, cookies_dir, token_config_path, monitoring_config_path, interva
                 _setup_logger(logger_name, os.path.join(log_dir, logger_name))
                 monitors[monitor_type][title] = monitor_cls(username, title, token_config, monitoring_user, cookies_dir)
                 if monitor_cls is ProfileMonitor:
-                    scheduler.add_job(monitors[monitor_type][title].watch, trigger='interval', seconds=interval)
+                    if telegram_bot_token and monitoring_config.get('maintainer_chat_id'):
+                        scheduler.add_job(monitors[monitor_type][title].watch, trigger='interval', seconds=interval)
     _setup_logger('monitor-caller', os.path.join(log_dir, 'monitor-caller'))
     MonitorManager.init(monitors=monitors)
 

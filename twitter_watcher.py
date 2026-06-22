@@ -38,7 +38,11 @@ class TwitterWatcher:
         for auth_username in auth_username_list:
             auth_cookie_file = os.path.join(cookies_dir, '{}.json'.format(auth_username))
             with open(auth_cookie_file, 'r') as f:
-                self.auth_cookie_list.append(json.load(f))
+                cookie_data = json.load(f)
+                # Support Cookie-Editor array format
+                if isinstance(cookie_data, list):
+                    cookie_data = {c['name']: c['value'] for c in cookie_data}
+                self.auth_cookie_list.append(cookie_data)
                 self.auth_cookie_list[-1]['username'] = auth_username
         self.current_token_index = random.randrange(self.token_number)
         self.logger = logging.getLogger('api')
